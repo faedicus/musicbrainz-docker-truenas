@@ -34,7 +34,6 @@ services:
   musicbrainz:
     build:
       context: build/musicbrainz-prebuilt
-    image: musicbrainz-docker_musicbrainz:latest
     logging:
       driver: "json-file"
       options:
