@@ -34,6 +34,7 @@ services:
   musicbrainz:
     build:
       context: build/musicbrainz-prebuilt
+    image: musicbrainz-docker_musicbrainz:latest
     logging:
       driver: "json-file"
       options:
@@ -148,9 +149,8 @@ services:
       - mbnet
 
   init:
-    build:
-      context: build/init
-    image: musicbrainz-docker_init:latest
+    image: metabrainz/musicbrainz-docker-musicbrainz:v-2026-07-30.1-build0
+    command: ["/usr/local/bin/init.sh"]
     logging:
       driver: "json-file"
       options:
