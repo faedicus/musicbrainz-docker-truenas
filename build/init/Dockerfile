@@ -1,7 +1,4 @@
-ARG SEARCH_IMAGE=musicbrainz-docker_search:4.1.0
 ARG MUSICBRAINZ_IMAGE=metabrainz/musicbrainz-docker-musicbrainz:v-2026-07-30.1-build0
-
-FROM ${SEARCH_IMAGE} AS search-scripts
 
 FROM ${MUSICBRAINZ_IMAGE}
 
@@ -14,11 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=search-scripts /usr/local/bin/fetch-backup-archives /usr/local/bin/
-COPY --from=search-scripts /usr/local/bin/load-backup-archives /usr/local/bin/
-COPY --from=search-scripts /usr/local/bin/remove-backup-archives /usr/local/bin/
+COPY build/init/scripts/fetch-backup-archives /usr/local/bin/
+COPY build/init/scripts/load-backup-archives /usr/local/bin/
+COPY build/init/scripts/remove-backup-archives /usr/local/bin/
+COPY build/init/scripts/init.sh /usr/local/bin/init.sh
 
-COPY scripts/init.sh /usr/local/bin/init.sh
 RUN chmod +x /usr/local/bin/init.sh
 
 ENTRYPOINT ["init.sh"]
