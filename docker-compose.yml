@@ -1,14 +1,5 @@
-# Description: Default compose file, with host port for musicbrainz
-
-volumes:
-  pgdata:
-    driver: local
-  solrdata:
-    driver: local
-  dbdump:
-    driver: local
-  solrdump:
-    driver: local
+# Forked automated MusicBrainz Docker deployment
+# Standalone use: docker compose up -d
 
 services:
   db:
@@ -22,63 +13,94 @@ services:
         max-file: "10"
     restart: unless-stopped
     command: postgres -c "shared_buffers=2048MB"
-    env_file:
-      - ./default/postgres.env
     shm_size: "2GB"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-musicbrainz}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-musicbrainz}
     volumes:
-      - pgdata:/var/lib/postgresql
+      - ${HOST_DATA_PATH:?HOST_DATA_PATH is required}/db:/var/lib/postgresql
     expose:
       - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-musicbrainz} -d ${POSTGRES_DB:-musicbrainz}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - mbnet
 
   musicbrainz:
     build:
       context: build/musicbrainz-prebuilt
+    image: musicbrainz-docker_musicbrainz:latest
     logging:
       driver: "json-file"
       options:
         max-size: "50m"
         max-file: "50"
     ports:
-      - "${MUSICBRAINZ_DOCKER_HOST_IPADDRCOL:-}${MUSICBRAINZ_WEB_SERVER_PORT:-5000}:5000"
+      - "${MUSICBRAINZ_WEB_SERVER_PORT:-5000}:5000"
     volumes:
-      - dbdump:/media/dbdump
-      - solrdump:/var/cache/musicbrainz/solr-backups:ro
+      - ${HOST_DATA_PATH:?HOST_DATA_PATH is required}/dbdump:/media/dbdump
+      - ${HOST_DATA_PATH:?HOST_DATA_PATH is required}/solrdump:/var/cache/musicbrainz/solr-backups:ro
+      - ${HOST_DATA_PATH:?HOST_DATA_PATH is required}/musicbrainz:/var/lib/musicbrainz
+      - ${HOST_CONFIG_PATH:?HOST_CONFIG_PATH is required}/replication.cron:${MUSICBRAINZ_CRONTAB_PATH:-/etc/cron.d/musicbrainz-replication}:ro
+      - ${HOST_SECRETS_PATH:?HOST_SECRETS_PATH is required}/metabrainz_access_token:/run/secrets/metabrainz_access_token:ro
     restart: unless-stopped
-    env_file:
-      - ./default/postgres.env
     environment:
-      - MUSICBRAINZ_BASE_FTP_URL=${MUSICBRAINZ_BASE_FTP_URL:-}
-      - MUSICBRAINZ_BASE_DOWNLOAD_URL=${MUSICBRAINZ_BASE_DOWNLOAD_URL:-https://data.metabrainz.org/pub/musicbrainz}
-      - MUSICBRAINZ_SERVER_PROCESSES=${MUSICBRAINZ_SERVER_PROCESSES:-10}
-      - MUSICBRAINZ_USE_PROXY=1
-      - MUSICBRAINZ_WEB_SERVER_HOST=${MUSICBRAINZ_WEB_SERVER_HOST:-localhost}
-      - MUSICBRAINZ_WEB_SERVER_PORT=${MUSICBRAINZ_WEB_SERVER_PORT:-5000}
+      MUSICBRAINZ_BASE_FTP_URL: ${MUSICBRAINZ_BASE_FTP_URL:-}
+      MUSICBRAINZ_BASE_DOWNLOAD_URL: ${MUSICBRAINZ_BASE_DOWNLOAD_URL:-https://data.metabrainz.org/pub/musicbrainz}
+      MUSICBRAINZ_SERVER_PROCESSES: ${MUSICBRAINZ_SERVER_PROCESSES:-10}
+      MUSICBRAINZ_USE_PROXY: 1
+      MUSICBRAINZ_WEB_SERVER_HOST: ${MUSICBRAINZ_WEB_SERVER_HOST:-localhost}
+      MUSICBRAINZ_WEB_SERVER_PORT: ${MUSICBRAINZ_WEB_SERVER_PORT:-5000}
+      MUSICBRAINZ_POSTGRES_SERVER: ${MUSICBRAINZ_POSTGRES_SERVER:-db}
+      MUSICBRAINZ_POSTGRES_READONLY_SERVER: ${MUSICBRAINZ_POSTGRES_READONLY_SERVER:-db}
+      MUSICBRAINZ_VALKEY_SERVER: ${MUSICBRAINZ_VALKEY_SERVER:-valkey}
+      MUSICBRAINZ_CRONTAB_PATH: ${MUSICBRAINZ_CRONTAB_PATH:-/etc/cron.d/musicbrainz-replication}
     depends_on:
-      - db
-      - search
-      - valkey
+      db:
+        condition: service_healthy
+      search:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
+    networks:
+      - mbnet
 
   indexer:
     build: build/sir
-    env_file:
-      - ./default/postgres.env
+    image: musicbrainz-docker_indexer:latest
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "10"
     volumes:
-      - ${SIR_CONFIG_PATH:-./default/indexer.ini}:/code/config.ini
+      - ${HOST_CONFIG_PATH:?HOST_CONFIG_PATH is required}/indexer.ini:${SIR_CONFIG_PATH:-/code/config.ini}:ro
     restart: unless-stopped
+    environment:
+      MUSICBRAINZ_POSTGRES_SERVER: ${MUSICBRAINZ_POSTGRES_SERVER:-db}
+      MUSICBRAINZ_POSTGRES_READONLY_SERVER: ${MUSICBRAINZ_POSTGRES_READONLY_SERVER:-db}
+      SIR_CONFIG_PATH: ${SIR_CONFIG_PATH:-/code/config.ini}
+      SIR_DEV_CONFIG_PATH: ${SIR_DEV_CONFIG_PATH:-}
     depends_on:
-      - db
-      - search
+      db:
+        condition: service_healthy
+      search:
+        condition: service_healthy
+    networks:
+      - mbnet
 
   search:
     build:
       context: build/solr
       args:
-        - MB_SOLR_VERSION=${MB_SOLR_VERSION:-4.1.0}
+        MB_SOLR_VERSION: ${MB_SOLR_VERSION:-4.1.0}
     image: musicbrainz-docker_search:${MB_SOLR_VERSION:-4.1.0}
     logging:
       driver: "json-file"
@@ -87,15 +109,23 @@ services:
         max-file: "10"
     restart: unless-stopped
     environment:
-      - SOLR_HEAP=2g
-      - LOG4J_FORMAT_MSG_NO_LOOKUPS=true
+      SOLR_HEAP: ${SOLR_HEAP:-2g}
+      LOG4J_FORMAT_MSG_NO_LOOKUPS: true
     mem_swappiness: 1
     expose:
       - "8983"
     volumes:
-      - dbdump:/media/dbdump:ro
-      - solrdata:/var/solr
-      - solrdump:/var/cache/musicbrainz/solr-backups
+      - ${HOST_DATA_PATH:?HOST_DATA_PATH is required}/dbdump:/media/dbdump:ro
+      - ${HOST_DATA_PATH:?HOST_DATA_PATH is required}/search:/var/solr
+      - ${HOST_DATA_PATH:?HOST_DATA_PATH is required}/solrdump:/var/cache/musicbrainz/solr-backups
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8983/solr/admin/info/system | grep -q 'status'"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    networks:
+      - mbnet
 
   valkey:
     image: valkey/valkey:9-alpine
@@ -107,3 +137,54 @@ services:
     restart: unless-stopped
     expose:
       - "6379"
+    volumes:
+      - ${HOST_DATA_PATH:?HOST_DATA_PATH is required}/valkey:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - mbnet
+
+  init:
+    build:
+      context: build/init
+    image: musicbrainz-docker_init:latest
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "10"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-musicbrainz}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-musicbrainz}
+      MUSICBRAINZ_BASE_DOWNLOAD_URL: ${MUSICBRAINZ_BASE_DOWNLOAD_URL:-https://data.metabrainz.org/pub/musicbrainz}
+      MUSICBRAINZ_BASE_FTP_URL: ${MUSICBRAINZ_BASE_FTP_URL:-}
+      MUSICBRAINZ_POSTGRES_SERVER: ${MUSICBRAINZ_POSTGRES_SERVER:-db}
+      MUSICBRAINZ_POSTGRES_READONLY_SERVER: ${MUSICBRAINZ_POSTGRES_READONLY_SERVER:-db}
+      MUSICBRAINZ_VALKEY_SERVER: ${MUSICBRAINZ_VALKEY_SERVER:-valkey}
+      MUSICBRAINZ_CRONTAB_PATH: ${MUSICBRAINZ_CRONTAB_PATH:-/etc/cron.d/musicbrainz-replication}
+      REPLICATION_TOKEN: ${REPLICATION_TOKEN:-}
+    volumes:
+      - ${HOST_DATA_PATH:?HOST_DATA_PATH is required}/dbdump:/media/dbdump
+      - ${HOST_DATA_PATH:?HOST_DATA_PATH is required}/solrdump:/var/cache/musicbrainz/solr-backups
+      - ${HOST_DATA_PATH:?HOST_DATA_PATH is required}/musicbrainz:/var/lib/musicbrainz
+      - ${HOST_CONFIG_PATH:?HOST_CONFIG_PATH is required}/replication.cron:${MUSICBRAINZ_CRONTAB_PATH:-/etc/cron.d/musicbrainz-replication}:ro
+      - ${HOST_SECRETS_PATH:?HOST_SECRETS_PATH is required}/metabrainz_access_token:/run/secrets/metabrainz_access_token
+    depends_on:
+      db:
+        condition: service_healthy
+      search:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    networks:
+      - mbnet
+    restart: no
+
+networks:
+  mbnet:
+    driver: bridge
