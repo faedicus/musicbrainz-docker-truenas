@@ -1,11 +1,11 @@
-ARG POSTGRES_VERSION=18
+ARG MUSICBRAINZ_IMAGE=metabrainz/musicbrainz-docker-musicbrainz:v-2026-07-30.1-build0
 ARG MB_SOLR_VERSION=4.1.0
 
-# Stage 1: grab the Solr index helper scripts from the search image
+# Stage 1: Solr helper scripts from the search image
 FROM metabrainz/mb-solr:${MB_SOLR_VERSION} AS search-scripts
 
 # Stage 2: init runtime image
-FROM metabrainz/musicbrainz-docker-musicbrainz:v-2026-07-30.1-build0
+FROM ${MUSICBRAINZ_IMAGE}
 
 USER root
 
