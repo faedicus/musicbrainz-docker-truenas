@@ -154,7 +154,6 @@ services:
       dockerfile: build/init/Dockerfile
       args:
         MUSICBRAINZ_IMAGE: ${MUSICBRAINZ_IMAGE:-metabrainz/musicbrainz-docker-musicbrainz:v-2026-07-30.1-build0}
-        MB_SOLR_VERSION: ${MB_SOLR_VERSION:-4.1.0}
     image: musicbrainz-docker_init:latest
     logging:
       driver: "json-file"
