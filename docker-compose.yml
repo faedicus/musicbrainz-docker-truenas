@@ -148,12 +148,21 @@ services:
     networks:
       - mbnet
 
+  musicbrainz-dev:
+    build:
+      context: build/musicbrainz-dev
+    image: musicbrainz-docker_musicbrainz-dev:latest
+    command: ["true"]
+    restart: no
+    networks:
+      - mbnet
+
   init:
     build:
       context: .
       dockerfile: build/init/Dockerfile
       args:
-        MUSICBRAINZ_IMAGE: ${MUSICBRAINZ_IMAGE:-metabrainz/musicbrainz-docker-musicbrainz:v-2026-07-30.1-build0}
+        MUSICBRAINZ_DEV_IMAGE: musicbrainz-docker_musicbrainz-dev:latest
     image: musicbrainz-docker_init:latest
     logging:
       driver: "json-file"
@@ -171,6 +180,11 @@ services:
       MUSICBRAINZ_VALKEY_SERVER: ${MUSICBRAINZ_VALKEY_SERVER:-valkey}
       MUSICBRAINZ_CRONTAB_PATH: ${MUSICBRAINZ_CRONTAB_PATH:-/etc/cron.d/musicbrainz-replication}
       REPLICATION_TOKEN: ${REPLICATION_TOKEN:-}
+      MUSICBRAINZ_DB_SCHEMA_SEQUENCE: ${MUSICBRAINZ_DB_SCHEMA_SEQUENCE:-}
+      MUSICBRAINZ_ADMIN_NAME: ${MUSICBRAINZ_ADMIN_NAME:-}
+      MUSICBRAINZ_ADMIN_PASSWORD: ${MUSICBRAINZ_ADMIN_PASSWORD:-}
+      MUSICBRAINZ_ADMIN_EMAIL: ${MUSICBRAINZ_ADMIN_EMAIL:-}
+
     volumes:
       - ${HOST_DATA_PATH:?HOST_DATA_PATH is required}/dbdump:/media/dbdump
       - ${HOST_DATA_PATH:?HOST_DATA_PATH is required}/solrdump:/var/cache/musicbrainz/solr-backups

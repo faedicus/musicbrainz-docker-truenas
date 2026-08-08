@@ -10,6 +10,20 @@ fi
 
 echo "=== MusicBrainz automated initialization ==="
 
+# ... wait-for blocks ...
+
+# Check if database already has data
+TABLE_COUNT=$(psql -U "${POSTGRES_USER:-musicbrainz}" -d "${POSTGRES_DB:-musicbrainz}" -t -c \
+  "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';" 2>/dev/null | tr -d ' ' || echo 0)
+
+if [[ "${TABLE_COUNT}" -gt 0 ]]; then
+  echo "Database already contains ${TABLE_COUNT} tables; skipping createdb.sh."
+else
+  echo "[1/6] Creating/fetching MusicBrainz database..."
+  createdb.sh -fetch
+fi
+
+# Continue initialization
 wait_for_port() {
   local host="$1" port="$2" name="$3"
   echo "Waiting for ${name} at ${host}:${port}..."
