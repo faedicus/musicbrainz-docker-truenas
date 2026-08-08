@@ -192,6 +192,8 @@ services:
       - ${HOST_DATA_PATH:?HOST_DATA_PATH is required}/musicbrainz:/var/lib/musicbrainz
       - ${HOST_CONFIG_PATH:?HOST_CONFIG_PATH is required}/replication.cron:${MUSICBRAINZ_CRONTAB_PATH:-/etc/cron.d/musicbrainz-replication}:ro
       - ${HOST_SECRETS_PATH:?HOST_SECRETS_PATH is required}/metabrainz_access_token:/run/secrets/metabrainz_access_token
+      - ${HOST_CONFIG_PATH:?HOST_CONFIG_PATH is required}/DBDefs.pm:/musicbrainz-server/lib/DBDefs.pm:ro
+      - ${HOST_CONFIG_PATH:?HOST_CONFIG_PATH is required}/DBDefs.pm:/DBDefs.pm:ro
     depends_on:
       db:
         condition: service_healthy
